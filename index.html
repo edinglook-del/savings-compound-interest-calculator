@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>存钱与复利计算器</title>
+  <meta name="description" content="专业的存钱与复利计算工具，帮助您规划财务目标">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    /* ==================== CSS 变量（主题系统） ==================== */
+    :root {
+      /* 浅色主题 */
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --surface-2: #f6f8fb;
+      --text: #1a202c;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-soft: rgba(37, 99, 235, 0.12);
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --shadow: 0 6px 24px rgba(23, 43, 77, 0.08);
+      --radius: 16px;
+      --chart-assets: #2563eb;
+      --chart-principal: #10b981;
+      --chart-interest: #f59e0b;
+      --chart-expense: #ef4444;
+    }
+
+    [data-theme="dark"] {
+      /* 深色主题 */
+      --bg: #0d1220;
+      --surface: #161e30;
+      --surface-2: #1c2538;
+      --text: #e8edf5;
+      --muted: #94a3b8;
+      --border: #263149;
+      --primary: #5b8cff;
+      --primary-soft: rgba(91, 140, 255, 0.15);
+      --green: #2dd4a0;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      --chart-assets: #5b8cff;
+      --chart-principal: #2dd4a0;
+      --chart-interest: #fbbf24;
+      --chart-expense: #f87171;
+    }
+
+    /* ==================== 全局重置与基础样式 ==================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      transition: background-color 0.25s, color 0.25s;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      /* 侧边栏展开时限制 1280px；折叠后放宽上限，占满整个平面 */
+      max-width: var(--app-max, 1280px);
+      margin: 0 auto;
+      padding: 0 20px 40px;
+      transition: max-width 0.3s ease;
+    }
+
+    /* 折叠状态：放宽容器上限并更新 CSS 变量 */
+    body.sidebar-collapsed .app {
+      --app-max: none;
+      max-width: none;
+    }
+
+    /* ==================== 顶部导航栏 ==================== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: var(--bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .brand .sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: var(--surface-2);
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    .icon-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* ==================== 主布局（PC 端侧边栏 + 内容区） ==================== */
+    .layout {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+      transition: grid-template-columns 0.3s ease;
+    }
+
+    /* 侧边栏折叠后：主内容区自动扩展占满整行 */
+    body.sidebar-collapsed .layout {
+      grid-template-columns: 0px minmax(0, 1fr);
+      gap: 0;
+    }
+
+    /* ==================== 侧边栏（PC 固定，移动端抽屉） ==================== */
+    .sidebar {
+      position: sticky;
+      top: 76px;
+      max-height: calc(100vh - 96px);
+      width: 340px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: max-width 0.3s ease, opacity 0.25s ease;
+    }
+
+    /* 折叠时收成 0 宽（内部内容被裁掉） */
+    body.sidebar-collapsed .sidebar {
+      max-width: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 侧边栏头部：标题 + 内收按钮（chevron），PC 显示 */
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px 12px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header .brand-mini {
+      font-weight: 600;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 内收（折叠）按钮：chevron 指向左，收起侧边栏 */
+    .collapse-btn {
+      width: 30px;
+      height: 30px;
+      border: none;
+      background: var(--surface-2);
+      color: var(--muted);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .collapse-btn:hover {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    /* 移动端抽屉的关闭（叉号）按钮，仅移动端显示 */
+    .sidebar-close {
+      display: none;
+    }
+
+    /* 侧边栏滚动区 */
+    .sidebar-body {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 侧边栏滚动条美化 */
+    .sidebar-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar-body::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .sidebar-body::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    .sidebar-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar-card h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ==================== 折叠后的“抽出”把手（浮动小标签） ==================== */
+    .sidebar-grip {
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 45;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 14px 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: none;
+      border-radius: 0 12px 12px 0;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 11px;
+      writing-mode: vertical-rl;
+      transition: all 0.2s;
+    }
+
+    .sidebar-grip:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+      padding-right: 10px;
+    }
+
+    .sidebar-grip .grip-chevron {
+      writing-mode: initial;
+      font-size: 14px;
+    }
+
+    /* 仅在折叠状态显示“抽出”把手 */
+    body.sidebar-collapsed .sidebar-grip {
+      display: flex;
+    }
+
+    /* ==================== 表单控件样式 ==================== */
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .field label b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .num-input {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-2);
+      padding: 0 10px;
+      transition: border-color 0.2s;
+    }
+
+    .num-input:focus-within {
+      border-color: var(--primary);
+    }
+
+    .num-input input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 9px 0;
+      font-size: 15px;
+      color: var(--text);
+      outline: none;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .num-input .unit {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--primary);
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    select.field-input {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 16px;
+    }
+
+    select.field-input:focus {
+      border-color: var(--primary);
+    }
+
+    /* ==================== 预设按钮组 ==================== */
+    .preset-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .preset {
+      flex: 1;
+      min-width: 64px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--muted);
+      padding: 7px 0;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .preset:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .preset.active {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* ==================== 结余预览框 ==================== */
+    .surplus-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      font-size: 13px;
+    }
+
+    .surplus-box .val {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .surplus-box .val.pos {
+      color: var(--green);
+    }
+
+    .surplus-box .val.neg {
+      color: var(--red);
+    }
+
+    /* ==================== 利率说明行 ==================== */
+    .rate-summary {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      margin-top: 10px;
+    }
+
+    .rate-summary strong {
+      color: var(--text);
+    }
+
+    /* ==================== 自定义利率输入框（默认隐藏） ==================== */
+    #customRateWrap {
+      display: none;
+    }
+
+    #customRateWrap .field {
+      margin-bottom: 10px;
+    }
+
+    /* ==================== 主内容区 ==================== */
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 0;
+    }
+
+    /* ==================== 状态横幅 ==================== */
+    .banner {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .banner.success {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .banner.danger {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+
+    .banner.warn {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .banner .banner-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    /* ==================== 数据卡片区域 ==================== */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 1100px) {
+      .cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(23, 43, 77, 0.12);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .stat-card[data-accent="#2563eb"]::before { background: var(--chart-assets); }
+    .stat-card[data-accent="#10b981"]::before { background: var(--chart-principal); }
+    .stat-card[data-accent="#f59e0b"]::before { background: var(--chart-interest); }
+    .stat-card[data-accent="#ef4444"]::before { background: var(--chart-expense); }
+
+    .stat-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      background: var(--primary-soft);
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ==================== 面板容器 ==================== */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel h2 {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .panel-note {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: normal;
+    }
+
+    /* ==================== 图表区域 ==================== */
+    #chart {
+      height: 420px;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 640px) {
+      #chart {
+        height: 320px;
+      }
+    }
+
+    .chart-fallback {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    /* ==================== 明细表区域 ==================== */
+    .detail-toggle {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: none;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      padding: 4px 0;
+      transition: color 0.2s;
+    }
+
+    .detail-toggle:hover {
+      color: var(--primary);
+    }
+
+    .detail-toggle .arrow {
+      transition: transform 0.2s;
+      font-size: 14px;
+    }
+
+    .detail-toggle.open .arrow {
+      transform: rotate(180deg);
+    }
+
+    .detail-wrap {
+      margin-top: 12px;
+    }
+
+    .detail-wrap.hidden {
+      display: none;
+    }
+
+    .table-scroll {
+      width: 100%;
+      max-height: 520px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-top: 12px;
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      /* 不设最小宽度：表格随侧边栏展开/收起完美自适应父容器 */
+      table-layout: fixed; /* 固定布局：按百分比严格分配列宽，表头与子行完美对齐 */
+    }
+
+    /* 所有数值统一右对齐 + 等宽数字，纵向完全对齐 */
+    table,
+    table td,
+    table th {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-2);
+      padding: 11px 14px;
+      text-align: right;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      z-index: 3;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 8 列百分比分配：时间列 16%，其余 7 列均分 84%（各 12%） */
+    thead th:nth-child(1),
+    td:nth-child(1) {
+      width: 16%;
+    }
+
+    thead th:nth-child(2),
+    td:nth-child(2) {
+      width: 12%;
+    }
+
+    thead th:nth-child(3),
+    td:nth-child(3) {
+      width: 12%;
+    }
+
+    thead th:nth-child(4),
+    td:nth-child(4) {
+      width: 12%;
+    }
+
+    thead th:nth-child(5),
+    td:nth-child(5) {
+      width: 12%;
+    }
+
+    thead th:nth-child(6),
+    td:nth-child(6) {
+      width: 12%;
+    }
+
+    thead th:nth-child(7),
+    td:nth-child(7) {
+      width: 12%;
+    }
+
+    thead th:nth-child(8),
+    td:nth-child(8) {
+      width: 12%;
+    }
+
+    /* 第一列（时间）左对齐，其余数值列右对齐 */
+    thead th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    td {
+      padding: 9px 14px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+    }
+
+    /* 斑马纹：JS 渲染时给偶数月份行加 zebra 类（单层 tbody，计数准确） */
+    .month-row.zebra td {
+      background: var(--surface-2);
+    }
+
+    .month-row:hover td {
+      background: var(--primary-soft);
+    }
+
+    /* 年份分组行（可点击展开/收起） */
+    .year-row td {
+      background: var(--surface-2);
+      cursor: pointer;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      border-top: 3px solid var(--surface); /* 年份组之间的分隔 */
+      transition: background 0.15s;
+    }
+
+    .year-row:hover td {
+      background: var(--primary-soft);
+    }
+
+    .year-row .yr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .year-row .caret {
+      display: inline-block;
+      transition: transform 0.2s;
+      margin-right: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* 年份行展开时箭头旋转（year-open 加在 year-row 上，单层 tbody 结构） */
+    .year-row.year-open .caret {
+      transform: rotate(90deg);
+      color: var(--primary);
+    }
+
+    .year-row .yr-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .year-row .yr-title .badge {
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--red);
+      color: #fff;
+      border-radius: 20px;
+      padding: 1px 8px;
+      margin-left: 8px;
+      white-space: nowrap;
+    }
+
+    /* ==================== 月度明细行 ==================== */
+    .month-row {
+      display: none; /* 默认收起，JS 切换 hidden 类控制显隐 */
+    }
+
+    .month-row.hidden {
+      display: none !important;
+    }
+
+    /* 年份展开后，其后的月份行显示（JS 通过 hidden 类控制，避免依赖嵌套 tbody） */
+    .month-row:not(.hidden) {
+      display: table-row;
+    }
+
+    .month-row td {
+      font-size: 12.5px;
+    }
+
+    .month-row td:first-child {
+      padding-left: 30px; /* 缩进，体现层级 */
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* 达成目标的行：高亮 + 左侧强调条 */
+    .month-row.reach td {
+      background: var(--primary-soft) !important;
+      font-weight: 600;
+    }
+
+    .month-row.reach td:first-child {
+      box-shadow: inset 3px 0 0 var(--primary);
+      color: var(--primary);
+    }
+
+    .month-row .star {
+      margin-right: 2px;
+    }
+
+    /* 数值语义色：收入/利息绿色，支出红色，资产主色 */
+    .cell-in {
+      color: var(--green);
+    }
+
+    .cell-out {
+      color: var(--red);
+    }
+
+    .cell-assets {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .table-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+
+    /* ==================== 移动端适配 ==================== */
+    .sidebar-mask {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 40;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .menu-btn {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        display: block;
+        transition: none;
+      }
+
+      /* 侧边栏变为抽屉 */
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: min(340px, 85vw);
+        max-width: min(340px, 85vw);
+        max-height: none;
+        z-index: 50;
+        transform: translateX(-105%);
+        transition: transform 0.25s ease-out;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 16px;
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* 移动端：折叠类不再影响宽度，抽屉靠 open 类控制 */
+      body.sidebar-collapsed .sidebar {
+        max-width: min(340px, 85vw);
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
+      }
+
+      .sidebar-mask {
+        display: block;
+        pointer-events: none;
+      }
+
+      body.sidebar-open .sidebar-mask {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* 抽屉头部 */
+      .sidebar-header {
+        padding-bottom: 14px;
+      }
+
+      .sidebar-close {
+        display: inline-flex;
+      }
+
+      .collapse-btn {
+        display: none;
+      }
+
+      /* 顶栏汉堡按钮 */
+      .menu-btn {
+        display: inline-flex;
+      }
+
+      /* 抽屉打开时隐藏“抽出”把手 */
+      body.sidebar-open .sidebar-grip {
+        display: none;
+      }
+
+      body.sidebar-collapsed .sidebar-grip {
+        display: flex;
+      }
+
+      /* 移动端：8 列较挤，允许表格横向滚动保证列宽对齐；
+         PC 端（宽屏）则完全自适应父容器、无横向滚动条 */
+      .detail-wrap table {
+        min-width: 720px;
+      }
+    }
+
+    /* ==================== 辅助类 ==================== */
+    .hidden {
+      display: none !important;
+    }
+
+    /* 工具提示样式（ECharts） */
+    .tt-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部导航栏 -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button id="btnMenu" class="icon-btn menu-btn" title="打开参数设置">☰</button>
+      <div class="brand">
+        <span class="logo">💰</span>
+        <div>
+          <h1>存钱与复利计算器</h1>
+          <span class="sub">专业财务规划工具</span>
+        </div>
+      </div>
+    </div>
+    <button id="btnTheme" class="icon-btn" title="切换主题">🌙</button>
+  </header>
+
+  <div class="app">
+    <div class="layout">
+      <!-- 侧边栏（参数控制区） -->
+      <aside class="sidebar" id="sidebar">
+        <!-- 侧边栏头部：内收按钮（PC）与关闭按钮（移动端） -->
+        <div class="sidebar-header">
+          <span class="brand-mini">⚙️ 参数设置</span>
+          <span>
+            <button id="btnCollapseSidebar" class="collapse-btn" title="收起参数设置">«</button>
+            <button id="btnCloseSidebar" class="icon-btn sidebar-close" title="关闭">✕</button>
+          </span>
+        </div>
+
+        <!-- 侧边栏滚动内容区 -->
+        <div class="sidebar-body">
+          <!-- 收入与支出 -->
+          <div class="sidebar-card">
+            <h3>💰 收入与支出</h3>
+            <div class="field">
+              <label><b>每月工资</b><span class="hint">与滑块双向联动</span></label>
+              <div class="num-input">
+                <input type="number" id="inSalary" min="0" step="100" value="10000">
+                <span class="unit">元</span>
+              </div>
+              <input type="range" id="rangeSalary" min="0" max="100000" step="100" value="10000">
+            </div>
+            <div class="field">
+              <label><b>每月支出</b><span class="hint">与滑块双向联动</span></label>
+              <div class="num-input">
+                <input type="number" id="inExpense" min="0" step="100" value="4000">
+                <span class="unit">元</span>
+              </div>
+              <input type="range" id="rangeExpense" min="0" max="50000" step="100" value="4000">
+            </div>
+            <div class="surplus-box" id="surplusBox">
+              <span>每月结余（工资 − 支出）</span>
+              <b class="val pos">+6,000 元</b>
+            </div>
+          </div>
+
+          <!-- 初始存款与目标 -->
+          <div class="sidebar-card">
+            <h3>🏦 初始存款与目标</h3>
+            <div class="field">
+              <label><b>初始存款</b></label>
+              <div class="num-input">
+                <input type="number" id="inInitial" min="0" step="1000" value="50000">
+                <span class="unit">元</span>
+              </div>
+            </div>
+            <div class="field">
+              <label><b>目标金额</b></label>
+              <div class="num-input">
+                <input type="number" id="inTarget" min="0" step="10000" value="1000000">
+                <span class="unit">元</span>
+              </div>
+            </div>
+            <div class="preset-row" id="presetRow">
+              <button class="preset" data-target="100000">10万</button>
+              <button class="preset" data-target="500000">50万</button>
+              <button class="preset" data-target="1000000">100万</button>
+              <button class="preset" data-target="5000000">500万</button>
+            </div>
+          </div>
+
+          <!-- 理财产品选择 -->
+          <div class="sidebar-card">
+            <h3>📈 理财产品</h3>
+            <div class="field">
+              <select id="selProduct" class="field-input">
+                <!-- JS 动态填充 -->
+              </select>
+            </div>
+            <div id="customRateWrap">
+              <div class="field">
+                <label><b>自定义年化利率</b></label>
+                <div class="num-input">
+                  <input type="number" id="inCustomRate" min="0" max="100" step="0.01" value="5">
+                  <span class="unit">%</span>
+                </div>
+              </div>
+            </div>
+            <div class="rate-summary" id="rateSummary">
+              <!-- JS 动态填充 -->
+            </div>
+          </div>
+
+          <!-- 计息方式 -->
+          <div class="sidebar-card">
+            <h3>📅 计息方式</h3>
+            <div class="field">
+              <select id="selMode" class="field-input">
+                <option value="monthly">按月复利</option>
+                <option value="daily">按日复利</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 主内容区 -->
+      <main class="content">
+        <!-- 状态横幅 -->
+        <div id="statusBanner" class="banner hidden">
+          <span class="banner-icon"></span>
+          <span id="bannerText"></span>
+        </div>
+
+        <!-- 数据卡片 -->
+        <section class="cards">
+          <div class="stat-card" data-accent="#2563eb">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-info">
+              <div class="stat-label">达成目标所需时间</div>
+              <div class="stat-value" id="valTime">—</div>
+              <div class="stat-sub" id="subTime"></div>
+            </div>
+          </div>
+          <div class="stat-card" data-accent="#10b981">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+              <div class="stat-label">最终总资产</div>
+              <div class="stat-value" id="valAssets">—</div>
+              <div class="stat-sub" id="subAssets"></div>
+            </div>
+          </div>
+          <div class="stat-card" data-accent="#f59e0b">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+              <div class="stat-label">累计利息收入</div>
+              <div class="stat-value" id="valInterest">—</div>
+              <div class="stat-sub" id="subInterest"></div>
+            </div>
+          </div>
+          <div class="stat-card" data-accent="#ef4444">
+            <div class="stat-icon">💸</div>
+            <div class="stat-info">
+              <div class="stat-label">起始日至结束累计支出</div>
+              <div class="stat-value" id="valExpense">—</div>
+              <div class="stat-sub" id="subExpense"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 资产增长曲线图表 -->
+        <section class="panel">
+          <h2>
+            📊 资产增长曲线（按年）
+            <span class="panel-note">年末汇总 · 含起始日至当年末累计支出曲线 · 可拖拽缩放</span>
+          </h2>
+          <div id="chart"></div>
+        </section>
+
+        <!-- 明细表 -->
+        <section class="panel">
+          <button class="detail-toggle" id="btnDetail">
+            <span id="btnDetailLabel">🗂️ 年度 / 月度明细表</span>
+            <span class="arrow">▾</span>
+          </button>
+          <div id="detailWrap" class="detail-wrap hidden">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>当月存入（元）</th>
+                    <th>当月支出（元）</th>
+                    <th>当月利息（元）</th>
+                    <th>累计本金（元）</th>
+                    <th>累计利息（元）</th>
+                    <th>累计支出（元）</th>
+                    <th>总资产（元）</th>
+                  </tr>
+                </thead>
+                <tbody id="detailBody"></tbody>
+              </table>
+            </div>
+            <div class="table-note">
+              💡 点击年份行可展开 / 收起该年 12 个月的明细；带 🌟 标记的行表示目标在该月达成。<br>
+              📌 “累计支出”列展示自存钱起始日至当月末的全部支出总额，图表中的红色曲线为该累计值。
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 移动端侧边栏遮罩 -->
+  <div id="sidebarMask" class="sidebar-mask"></div>
+
+  <!-- 折叠后的“抽出”把手（点击重新展开侧边栏） -->
+  <div id="sidebarGrip" class="sidebar-grip" title="展开参数设置">
+    <span>参数设置</span>
+    <span class="grip-chevron">»</span>
+  </div>
+
+  <script>
+    // ==================== 常量定义 ====================
+    const PRODUCTS = [
+      { id: 'demand', name: '活期存款', rate: 0.05, desc: '0.05%' },
+      { id: 'mmf', name: '货币基金 / 余额宝', rate: 1.2, desc: '1.20%' },
+      { id: 'dep1', name: '银行 1 年定存', rate: 1.1, desc: '1.10%' },
+      { id: 'dep3', name: '银行 3 年定存', rate: 1.55, desc: '1.55%' },
+      { id: 'treasury', name: '储蓄国债', rate: 1.65, desc: '1.63%～1.70%（按中值 1.65% 模拟）' },
+      { id: 'r2', name: '银行理财 R2 稳健', rate: 2.5, desc: '2.50%' },
+      { id: 'purebond', name: '纯债基金', rate: 3.5, desc: '3.50%' },
+      { id: 'index', name: '指数基金定投', rate: 7.0, desc: '7.00%（长期均值参考）' },
+      { id: 'custom', name: '自定义利率', rate: null, desc: '手动输入' },
+    ];
+    const CUSTOM_ID = 'custom';
+    const MAX_MONTHS = 1200;          // 模拟上限：100 年
+    const NEG_SHOW_MONTHS = 120;      // 入不敷出时最多展示 10 年
+    const NEG_MIN_MONTHS = 36;        // 入不敷出时至少展示 3 年
+
+    // ==================== 工具函数 ====================
+    const $ = (id) => document.getElementById(id);
+
+    function trimNum(n) {
+      return parseFloat(n.toFixed(2));
+    }
+
+    function fmtMoney(v) {
+      const sign = v < 0 ? '-' : '';
+      const abs = Math.abs(v);
+      if (abs >= 1e8) return sign + trimNum(abs / 1e8) + ' 亿';
+      if (abs >= 1e4) return sign + trimNum(abs / 1e4) + ' 万';
+      return sign + abs.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+    }
+
+    function fmtMoneySigned(v) {
+      return (v > 0 ? '+' : '') + fmtMoney(v);
+    }
+
+    function fmtDuration(months) {
+      const y = Math.floor(months / 12);
+      const m = months % 12;
+      if (y === 0) return m + ' 个月';
+      if (m === 0) return y + ' 年';
+      return y + ' 年 ' + m + ' 个月';
+    }
+
+    function daysInYear(y) {
+      return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 366 : 365;
+    }
+
+    // ==================== 核心计算逻辑 ====================
+    function getParams() {
+      const numVal = (id) => {
+        const v = parseFloat($(id).value);
+        return Number.isFinite(v) && v >= 0 ? v : 0;
+      };
+
+      const salary = numVal('inSalary');
+      const expense = numVal('inExpense');
+      const pid = $('selProduct').value;
+      const product = PRODUCTS.find((p) => p.id === pid);
+      const annualRate = pid === CUSTOM_ID ? numVal('inCustomRate') : product.rate;
+
+      return {
+        salary,
+        expense,
+        surplus: salary - expense,
+        initial: numVal('inInitial'),
+        target: Math.max(0, numVal('inTarget')),
+        annualRate, // 年化收益率（%）
+        mode: $('selMode').value, // 'monthly' | 'daily'
+      };
+    }
+
+    function runSimulation(p) {
+      const now = new Date();
+      const START_YEAR = now.getFullYear();
+      const START_MONTH = now.getMonth();
+
+      // 月利率与日利率
+      const monthlyRate = p.annualRate / 12 / 100;
+      const dailyRate = p.annualRate / 365 / 100;
+
+      // 初始状态判断
+      const initialReached = p.initial >= p.target;
+      const negativeFlow = p.surplus < 0;
+
+      let assets = p.initial;
+      let principal = p.initial;
+      let interestCum = 0;
+      let expenseCum = 0;   // 起始日至当前累计支出（元）
+      let reached = initialReached;
+      let reachMonth = initialReached ? 0 : -1;
+      let reachYearIdx = -1;
+      let reason = null; // 'negative' | 'cap'
+
+      const monthly = [];
+      const years = [];
+      const newYearData = (y) => ({
+        year: y,
+        months: [],
+        deposit: 0,
+        expense: 0,          // 本年支出
+        expenseCum: 0,       // 起始日至本年末累计支出
+        yearInterest: 0,
+        assets: 0,
+        principal: 0,
+        interest: 0,
+        days: 365,
+        reachedInYear: false,
+      });
+      let yi = newYearData(START_YEAR);
+      const closeYear = () => {
+        yi.days = daysInYear(yi.year);
+        years.push(yi);
+      };
+
+      if (negativeFlow && !initialReached) {
+        reason = 'negative';
+      }
+
+      for (let m = 1; m <= MAX_MONTHS; m++) {
+        // ① 本月计息：上月总资产 × 收益率（复利滚动）
+        let monthInterest = 0;
+        if (p.mode === 'daily') {
+          // 按日复利：月内逐日计息，月末再存入结余
+          const days = new Date(START_YEAR, START_MONTH + m, 0).getDate();
+          for (let d = 0; d < days; d++) {
+            const di = assets * dailyRate;
+            assets += di;
+            monthInterest += di;
+          }
+        } else {
+          // 按月复利：本月利息 = 上月总资产 × 月利率
+          monthInterest = assets * monthlyRate;
+          assets += monthInterest;
+        }
+
+        // ② 月末存入本月结余（可能为负 = 动用存款），并累计本月支出
+        const deposit = p.surplus;
+        assets += deposit;
+        principal += deposit;
+        interestCum += monthInterest;
+        expenseCum += p.expense;   // 每月支出累加
+
+        // ③ 记录月度明细 + 年度汇总
+        const d = new Date(START_YEAR, START_MONTH + m - 1, 1);
+        const y = d.getFullYear();
+        if (y !== yi.year) {
+          closeYear();
+          yi = newYearData(y);
+        }
+        const rec = {
+          label: y + '-' + String(d.getMonth() + 1).padStart(2, '0'),
+          deposit,
+          expense: p.expense,
+          expenseCum,      // 起始日至本月末累计支出
+          interest: monthInterest,
+          principal,
+          interestCum,
+          assets,
+          reached: false,
+        };
+        monthly.push(rec);
+        yi.months.push(rec);
+        yi.deposit += deposit;
+        yi.expense += p.expense;
+        yi.expenseCum = expenseCum;
+        yi.yearInterest += monthInterest;
+        yi.assets = assets;
+        yi.principal = principal;
+        yi.interest = interestCum;
+
+        // ④ 目标达成检测（首次达到即停止）
+        if (!reached && assets >= p.target) {
+          reached = true;
+          reachMonth = m;
+          reachYearIdx = years.length; // 当前尚未关闭的年份下标
+          rec.reached = true;
+          yi.reachedInYear = true;
+        }
+
+        // ⑤ 停止条件
+        if (reason === 'negative') {
+          if (assets <= 0 && m >= NEG_MIN_MONTHS) break; // 资产耗尽，展示 3 年后再停
+          if (m >= NEG_SHOW_MONTHS) break; // 最多展示 10 年
+        } else if (reached) {
+          if (initialReached) {
+            if (m >= 12) break; // 已达成：展示一整年作参考
+          } else {
+            break; // 达成即停
+          }
+        }
+        if (m === MAX_MONTHS && !reached) {
+          reason = 'cap'; // 100 年仍未达成
+        }
+      }
+      closeYear();
+
+      return {
+        monthly,
+        years,
+        reached,
+        reachMonth,
+        reachYearIdx: reached ? (initialReached ? 0 : reachYearIdx) : -1,
+        reason,
+        finalAssets: assets,
+        totalPrincipal: principal,
+        totalInterest: interestCum,
+        totalExpense: expenseCum,
+        monthsCount: monthly.length,
+      };
+    }
+
+    // ==================== 渲染函数 ====================
+    let lastSim = null;
+    let lastParams = null;
+    let chart = null;
+    let rafPending = false;
+
+    function scheduleRecalc() {
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        recalc();
+      });
+    }
+
+    function recalc() {
+      const p = getParams();
+      const sim = runSimulation(p);
+      lastSim = sim;
+      lastParams = p;
+
+      renderSidebarPreview(p);
+      renderBanner(sim, p);
+      renderCards(sim, p);
+      renderChart(sim);
+      renderTable(sim);
+      syncPresetActive(p.target);
+    }
+
+    function hexToRgba(hex, a) {
+      const h = hex.replace('#', '');
+      const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+    }
+
+    function getCssVar(name, fallback) {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    }
+
+    function renderSidebarPreview(p) {
+      const s = p.surplus;
+      const box = $('surplusBox');
+      const cls = s >= 0 ? 'pos' : 'neg';
+      box.innerHTML = `
+        <span>每月结余（工资 − 支出）</span>
+        <b class="val ${cls}">${fmtMoneySigned(s)} 元</b>
+      `;
+
+      const modeText = p.mode === 'monthly' ? '按月复利' : '按日复利';
+      const rateText = p.mode === 'monthly'
+        ? `月利率约 ${(p.annualRate / 12).toFixed(4)}%`
+        : `日利率约 ${(p.annualRate / 365).toFixed(4)}%`;
+      $('rateSummary').textContent = `年化 ${trimNum(p.annualRate)}% · ${rateText} · ${modeText}`;
+    }
+
+    function renderBanner(sim, p) {
+      const b = $('statusBanner');
+      const icon = $('bannerIcon');
+      const txt = $('bannerText');
+
+      const show = (type, i, t) => {
+        b.className = 'banner ' + type;
+        icon.textContent = i;
+        txt.textContent = t;
+      };
+
+      if (sim.reached && sim.reachMonth === 0) {
+        show(
+          'success',
+          '🎉',
+          `当前存款 ${fmtMoney(p.initial)} 元已达到目标 ${fmtMoney(p.target)} 元，无需再等待！`
+        );
+      } else if (!sim.reached && sim.reason === 'negative') {
+        show(
+          'danger',
+          '⚠️',
+          `无法达成：每月支出（${fmtMoney(p.expense)} 元）大于工资（${fmtMoney(p.salary)} 元），每月净流出 ${fmtMoney(-p.surplus)} 元，且初始存款不足以覆盖缺口，资产将持续缩水。请增收、节支或降低目标。`
+        );
+      } else if (!sim.reached && sim.reason === 'cap') {
+        show(
+          'warn',
+          '⏳',
+          `按当前参数，100 年内仍无法达成目标。建议提高每月结余、选择收益率更高的产品，或适当降低目标金额。`
+        );
+      } else {
+        b.className = 'banner hidden';
+      }
+    }
+
+    function renderCards(sim, p) {
+      // ① 达成时间
+      if (sim.reached) {
+        if (sim.reachMonth === 0) {
+          $('valTime').textContent = '已达成 🎉';
+          $('subTime').textContent = '当前资产已 ≥ 目标金额';
+        } else {
+          $('valTime').textContent = fmtDuration(sim.reachMonth);
+          const d = new Date(new Date().getFullYear(), new Date().getMonth() + sim.reachMonth, 1);
+          $('subTime').textContent = `预计 ${d.getFullYear()} 年 ${d.getMonth() + 1} 月达成`;
+        }
+      } else {
+        $('valTime').textContent = '无法达成';
+        $('subTime').textContent = sim.reason === 'negative' ? '支出 > 收入，资产持续缩水' : '100 年内增速不足';
+      }
+
+      // ② 最终总资产
+      $('valAssets').textContent = fmtMoney(sim.finalAssets);
+      $('subAssets').textContent = `其中累计本金 ${fmtMoney(sim.totalPrincipal)}`;
+
+      // ③ 累计利息
+      $('valInterest').textContent = fmtMoney(sim.totalInterest);
+      const pct = sim.totalPrincipal > 0 ? (sim.totalInterest / sim.totalPrincipal * 100) : 0;
+      $('subInterest').textContent = sim.reached
+        ? `利息相当于本金的 ${pct.toFixed(1)}%`
+        : `模拟 ${fmtDuration(sim.monthsCount)} 的利息`;
+
+      // ④ 起始日至结束累计支出（而非当年支出）
+      $('valExpense').textContent = fmtMoney(sim.totalExpense);
+      $('subExpense').textContent = `每月 ${fmtMoney(p.expense)} 元 × ${sim.monthsCount} 个月`;
+    }
+
+    function renderChart(sim) {
+      const el = $('chart');
+      if (!window.echarts) {
+        el.innerHTML =
+          '<div class="chart-fallback">⚠️ 图表组件（ECharts）加载失败，请检查网络连接后刷新页面。<br>文字数据与明细表不受影响。</div>';
+        return;
+      }
+
+      if (!chart) chart = echarts.init(el);
+
+      const ys = sim.years;
+      const assetsArr = ys.map((y) => y.assets);
+      const principalArr = ys.map((y) => y.principal);
+      const interestArr = ys.map((y) => y.interest);
+      // 累计支出曲线：起始日至各年末的全部支出总额
+      const expenseArr = ys.map((y) => y.expenseCum);
+
+      // 主题相关颜色（来自 CSS 变量，切换主题后自动适配）
+      const cAssets = getCssVar('--chart-assets', '#2563eb');
+      const cPrincipal = getCssVar('--chart-principal', '#10b981');
+      const cInterest = getCssVar('--chart-interest', '#f59e0b');
+      const cExpense = getCssVar('--chart-expense', '#ef4444');
+      const cText = getCssVar('--muted', '#64748b');
+      const cStrong = getCssVar('--text', '#16233a');
+      const cBorder = getCssVar('--border', '#e3e9f2');
+      const cSurface = getCssVar('--surface', '#ffffff');
+      const cSurface2 = getCssVar('--surface-2', '#f6f8fb');
+      const cPrimary = getCssVar('--primary', '#2563eb');
+
+      // Y 轴单位：按全部序列最大值自动选择「元 / 万 / 亿」
+      const maxV = Math.max(0, ...assetsArr, ...principalArr, ...interestArr, ...expenseArr);
+      const unit = maxV >= 1e8 ? 1e8 : maxV >= 1e4 ? 1e4 : 1;
+      const unitName = unit === 1e8 ? '亿' : unit === 1e4 ? '万' : '元';
+      const fmtAxis = (v) => (unit === 1 ? String(v) : trimNum(v / unit) + ' ' + unitName);
+
+      // dataZoom：年份较多时默认展示最近 6 年，可拖拽/滚轮缩放
+      const n = ys.length;
+      const zoomStart = n > 6 ? Math.round(100 - (6 / n) * 100) : 0;
+
+      // Tooltip：年末多项指标（含累计支出）
+      const tooltipFormatter = (params) => {
+        if (!params || !params.length) return '';
+        const i = params[0].dataIndex;
+        const y = ys[i];
+        if (!y) return '';
+        const lastMonth = y.months[y.months.length - 1].label.slice(5);
+        const suffix = y.months.length < 12 && i === n - 1 ? `（截至 ${lastMonth} 月）` : '（年末）';
+        let html = `<div class="tt-title">${y.year} 年${suffix}</div>`;
+        params.forEach((p) => {
+          html += `${p.marker}${p.seriesName}：<b>${fmtMoney(p.value)}</b><br>`;
+        });
+        html += `当年存入金额：<b>${fmtMoneySigned(y.deposit)}</b><br>`;
+        html += `当年支出金额：<b>${fmtMoney(y.expense)}</b><br>`;
+        html += `起始日至本年末累计支出：<b>${fmtMoney(y.expenseCum)}</b><br>`;
+        html += `当年利息：<b>${fmtMoney(y.yearInterest)}</b><br>`;
+        html += `日均利息：<b>${fmtMoney(y.yearInterest / y.days)}</b>`;
+        return html;
+      };
+
+      const option = {
+        color: [cAssets, cPrincipal, cInterest, cExpense],
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: cSurface,
+          borderColor: cBorder,
+          borderWidth: 1,
+          padding: [10, 14],
+          textStyle: { color: cStrong, fontSize: 12 },
+          extraCssText: 'box-shadow:0 8px 24px rgba(0,0,0,.12);border-radius:10px;',
+          formatter: tooltipFormatter,
+        },
+        legend: {
+          top: 4,
+          right: 4,
+          itemWidth: 16,
+          itemHeight: 8,
+          textStyle: { color: cText, fontSize: 12 },
+        },
+        grid: {
+          left: 10,
+          right: 14,
+          top: 40,
+          bottom: 62,
+          containLabel: true,
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: ys.map((y) => y.year + '年'),
+          axisLine: { lineStyle: { color: cBorder } },
+          axisTick: { show: false },
+          axisLabel: { color: cText, fontSize: 11 },
+        },
+        yAxis: {
+          type: 'value',
+          name: '金额（' + unitName + '）',
+          nameTextStyle: { color: cText, fontSize: 11 },
+          axisLabel: { color: cText, fontSize: 11, formatter: fmtAxis },
+          splitLine: { lineStyle: { color: cBorder, type: 'dashed' } },
+        },
+        dataZoom: [
+          { type: 'inside', start: zoomStart, end: 100 },
+          {
+            type: 'slider',
+            start: zoomStart,
+            end: 100,
+            bottom: 6,
+            height: 20,
+            borderColor: cBorder,
+            backgroundColor: cSurface2,
+            fillerColor: hexToRgba(cPrimary, 0.15),
+            handleStyle: { color: cPrimary, borderColor: cPrimary },
+            moveHandleStyle: { color: cPrimary },
+            dataBackground: {
+              lineStyle: { color: cBorder },
+              areaStyle: { color: hexToRgba(cPrimary, 0.08) },
+            },
+            selectedDataBackground: {
+              lineStyle: { color: cPrimary },
+              areaStyle: { color: hexToRgba(cPrimary, 0.18) },
+            },
+            textStyle: { color: cText, fontSize: 10 },
+          },
+        ],
+        series: [
+          {
+            name: '总资产',
+            type: 'line',
+            data: assetsArr,
+            smooth: false,  // 直线与拐点
+            symbol: 'circle',
+            symbolSize: 5,
+            showSymbol: false,
+            lineStyle: { width: 3 },
+            itemStyle: { color: cAssets },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: hexToRgba(cAssets, 0.32) },
+                { offset: 1, color: hexToRgba(cAssets, 0.02) },
+              ]),
+            },
+            // 目标达成节点：大头针标记
+            markPoint:
+              sim.reached && sim.reachYearIdx >= 0 && sim.reachYearIdx < n
+                ? {
+                    symbol: 'pin',
+                    symbolSize: 48,
+                    symbolOffset: [0, -24],
+                    itemStyle: {
+                      color: '#ef4444',
+                      shadowBlur: 10,
+                      shadowColor: 'rgba(239, 68, 68, 0.45)',
+                    },
+                    label: {
+                      formatter: '🎯 目标达成',
+                      color: '#fff',
+                      fontSize: 11,
+                      position: 'inside',
+                    },
+                    data: [
+                      {
+                        name: '目标达成',
+                        coord: [sim.reachYearIdx, ys[sim.reachYearIdx].assets],
+                        value: ys[sim.reachYearIdx].assets,
+                      },
+                    ],
+                    tooltip: {
+                      formatter: () => '🎯 目标达成：' + fmtMoney(ys[sim.reachYearIdx].assets),
+                    },
+                  }
+                : undefined,
+          },
+          {
+            name: '累计本金',
+            type: 'line',
+            data: principalArr,
+            smooth: false,  // 直线与拐点
+            showSymbol: false,
+            lineStyle: { width: 2 },
+            itemStyle: { color: cPrincipal },
+          },
+          {
+            name: '累计利息',
+            type: 'line',
+            data: interestArr,
+            smooth: false,  // 直线与拐点
+            showSymbol: false,
+            lineStyle: { width: 2, type: 'dashed' },
+            itemStyle: { color: cInterest },
+          },
+          {
+            // 累计支出曲线：起始日至各年末累计花销
+            name: '累计支出',
+            type: 'line',
+            data: expenseArr,
+            smooth: false,  // 直线与拐点
+            showSymbol: false,
+            lineStyle: { width: 2, type: 'dotted' },
+            itemStyle: { color: cExpense },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: hexToRgba(cExpense, 0.15) },
+                { offset: 1, color: hexToRgba(cExpense, 0.01) },
+              ]),
+            },
+          },
+        ],
+      };
+      chart.setOption(option, true);
+    }
+
+    function renderTable(sim) {
+      $('btnDetailLabel').textContent = `🗂️ 年度 / 月度明细表（${sim.years.length} 年 · ${sim.monthsCount} 个月）`;
+
+      const body = $('detailBody'); // 单一 tbody，所有行顺序插入，绝不嵌套 tbody
+      body.innerHTML = '';
+      let monthIdx = 0; // 全局月份序号，用于斑马纹
+
+      sim.years.forEach((y) => {
+        // ── 年份行：直接作为 detailBody 的子行 ──
+        const yrTr = document.createElement('tr');
+        yrTr.className = 'year-row';
+        const badge = y.reachedInYear ? '<span class="badge">🎯 目标达成</span>' : '';
+        yrTr.innerHTML = `
+          <td colspan="8">
+            <div class="yr">
+              <span class="yr-title">
+                <span class="caret">▸</span>
+                <span>${y.year} 年（共 ${y.months.length} 个月）</span>${badge}
+              </span>
+            </div>
+          </td>
+        `;
+        body.appendChild(yrTr);
+
+        // ── 月度明细行：紧随年份行，顺序插入同一个 tbody ──
+        const monthRows = y.months.map((mo) => {
+          const r = document.createElement('tr');
+          // 偶数序号加 zebra 斑马纹；达成行加 reach 高亮
+          r.className = 'month-row hidden'
+            + (monthIdx % 2 === 1 ? ' zebra' : '')
+            + (mo.reached ? ' reach' : '');
+          const star = mo.reached ? '<span class="star">🌟</span>' : '';
+          // mo.label 格式 "2024-01" → "2024年1月"
+          const [yy, mm] = mo.label.split('-');
+          const monthText = `${yy}年${parseInt(mm, 10)}月`;
+          r.innerHTML = `
+            <td>${star}${monthText}</td>
+            <td class="cell-in">${fmtMoneySigned(mo.deposit)}</td>
+            <td class="cell-out">${fmtMoney(mo.expense)}</td>
+            <td class="cell-in">${fmtMoney(mo.interest)}</td>
+            <td>${fmtMoney(mo.principal)}</td>
+            <td>${fmtMoney(mo.interestCum)}</td>
+            <td class="cell-out">${fmtMoney(mo.expenseCum)}</td>
+            <td class="cell-assets">${fmtMoney(mo.assets)}</td>
+          `;
+          monthIdx++;
+          return r;
+        });
+
+        // 点击年份行：切换自己的 year-open 与后续所有月份行的 hidden
+        yrTr.addEventListener('click', () => {
+          const isOpen = yrTr.classList.toggle('year-open');
+          monthRows.forEach((mr) => mr.classList.toggle('hidden', !isOpen));
+        });
+
+        monthRows.forEach((mr) => body.appendChild(mr));
+      });
+    }
+
+    function syncPresetActive(target) {
+      document.querySelectorAll('.preset').forEach((b) => {
+        b.classList.toggle('active', parseFloat(b.dataset.target) === target);
+      });
+    }
+
+    // ==================== 侧边栏折叠 / 展开控制 ====================
+    const MOBILE_MQ = window.matchMedia('(max-width: 900px)');
+
+    function isMobile() {
+      return MOBILE_MQ.matches;
+    }
+
+    // 展开侧边栏：PC 展开内收的栏，移动端打开抽屉
+    function openSidebar() {
+      if (isMobile()) {
+        document.body.classList.add('sidebar-open');
+        document.body.classList.remove('sidebar-collapsed');
+      } else {
+        document.body.classList.remove('sidebar-collapsed');
+      }
+      syncSidebarUI();
+      // 布局过渡（0.3s）结束后重绘图表，适配新宽度
+      if (chart) setTimeout(() => chart.resize(), 320);
+    }
+
+    // 收起侧边栏：PC 折叠成 0 宽（露出把手），移动端关闭抽屉
+    function closeSidebar() {
+      if (isMobile()) {
+        document.body.classList.remove('sidebar-open');
+      } else {
+        document.body.classList.add('sidebar-collapsed');
+      }
+      syncSidebarUI();
+      // 布局过渡（0.3s）结束后重绘图表，占满扩展后的平面
+      if (chart) setTimeout(() => chart.resize(), 320);
+    }
+
+    function syncSidebarUI() {
+      const collapsed = document.body.classList.contains('sidebar-collapsed');
+      const open = document.body.classList.contains('sidebar-open');
+      // 移动端抽屉打开时锁定页面滚动
+      document.body.style.overflow = isMobile() && open ? 'hidden' : '';
+      // “抽出”把手：折叠或移动端抽屉关闭时显示
+      $('sidebarGrip').style.display =
+        (!isMobile() && collapsed) || (isMobile() && !open) ? 'flex' : 'none';
+      // 遮罩仅移动端抽屉打开时启用
+      $('sidebarMask').style.display = isMobile() ? 'block' : 'none';
+    }
+
+    function bindSidebar() {
+      // PC：头部 « 按钮 → 折叠侧边栏
+      $('btnCollapseSidebar').addEventListener('click', closeSidebar);
+      // 移动端：✕ 按钮 → 关闭抽屉
+      $('btnCloseSidebar').addEventListener('click', closeSidebar);
+      // 折叠后的“抽出”把手 → 重新展开
+      $('sidebarGrip').addEventListener('click', openSidebar);
+      // 移动端顶栏 ☰ 按钮 → 打开抽屉
+      $('btnMenu').addEventListener('click', openSidebar);
+      // 点击遮罩关闭抽屉
+      $('sidebarMask').addEventListener('click', closeSidebar);
+      // ESC 键关闭 / 折叠
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSidebar();
+      });
+      // 跨断点时清理状态，避免布局错乱
+      MOBILE_MQ.addEventListener('change', () => {
+        document.body.classList.remove('sidebar-open', 'sidebar-collapsed');
+        syncSidebarUI();
+        if (chart) chart.resize();
+      });
+      // 侧边栏折叠动画（grid-template-columns 过渡）结束时重绘图表
+      document.querySelector('.layout').addEventListener('transitionend', (e) => {
+        if (e.propertyName === 'grid-template-columns' && chart) chart.resize();
+      });
+      syncSidebarUI();
+    }
+
+    // ==================== 绑定输入事件 ====================
+    function bindSliders() {
+      const pairs = [['rangeSalary', 'inSalary'], ['rangeExpense', 'inExpense']];
+      pairs.forEach(([rid, iid]) => {
+        const r = $(rid);
+        const i = $(iid);
+        r.addEventListener('input', () => {
+          i.value = r.value;
+          scheduleRecalc();
+        });
+        i.addEventListener('input', () => {
+          r.value = String(
+            Math.min(Math.max(parseFloat(i.value) || 0, parseFloat(r.min)), parseFloat(r.max))
+          );
+          scheduleRecalc();
+        });
+      });
+    }
+
+    function bindInputs() {
+      ['inInitial', 'inTarget', 'inCustomRate'].forEach((id) => {
+        $(id).addEventListener('input', scheduleRecalc);
+      });
+      $('selProduct').addEventListener('change', () => {
+        toggleCustomRate();
+        scheduleRecalc();
+      });
+      $('selMode').addEventListener('change', scheduleRecalc);
+
+      document.querySelectorAll('.preset').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          $('inTarget').value = btn.dataset.target;
+          scheduleRecalc();
+        });
+      });
+    }
+
+    function toggleCustomRate() {
+      $('customRateWrap').style.display = $('selProduct').value === CUSTOM_ID ? 'block' : 'none';
+    }
+
+    function bindDetail() {
+      const btn = $('btnDetail');
+      const wrap = $('detailWrap');
+      btn.addEventListener('click', () => {
+        const nowHidden = wrap.classList.toggle('hidden');
+        btn.classList.toggle('open', !nowHidden);
+      });
+    }
+
+    function initTheme() {
+      try {
+        const saved = localStorage.getItem('mc-theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(saved || (prefersDark ? 'dark' : 'light'));
+      } catch (e) {
+        applyTheme('light');
+      }
+
+      $('btnTheme').addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme');
+        applyTheme(cur === 'dark' ? 'light' : 'dark');
+        recalc(); // 图表配色跟随主题刷新
+      });
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      try {
+        localStorage.setItem('mc-theme', theme);
+      } catch (e) { /* 隐私模式下忽略 */ }
+      $('btnTheme').textContent = theme === 'dark' ? '☀️' : '🌙';
+      $('btnTheme').title = theme === 'dark' ? '切换到浅色主题' : '切换到深色主题';
+    }
+
+    // ==================== 初始化 ====================
+    function populateProducts() {
+      const sel = $('selProduct');
+      PRODUCTS.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.id === CUSTOM_ID ? p.name : `${p.name}（年化 ${p.desc}）`;
+        sel.appendChild(opt);
+      });
+      sel.value = 'mmf'; // 默认：货币基金/余额宝
+    }
+
+    function init() {
+      populateProducts();
+      initTheme();
+      bindSliders();
+      bindInputs();
+      bindDetail();
+      bindSidebar();
+      toggleCustomRate();
+      recalc();
+    }
+
+    // 启动应用
+    document.addEventListener('DOMContentLoaded', init);
+
+    // 窗口大小改变时调整图表
+    window.addEventListener('resize', () => {
+      if (chart) chart.resize();
+    });
+  </script>
+</body>
+</html>
